@@ -1931,18 +1931,18 @@ function DigitCanvas() {
       // Қосымша пішіндік түзету: 1 өте жіңішке, 0/8 толық, 2-де жоғарғы-орта-төмен сызықтар бар.
       if (Number(digit) === 1 && aspect > 2.1) score += 10;
       if (Number(digit) === 2) {
-        const top = binary[0].reduce((a, b) => a + b, 0);
-        const mid = binary[3].reduce((a, b) => a + b, 0);
-        const bottom = binary[6].reduce((a, b) => a + b, 0);
+        const top = binary[0].reduce<number>((a, b) => a + Number(b), 0);
+        const mid = binary[3].reduce<number>((a, b) => a + Number(b), 0);
+        const bottom = binary[6].reduce<number>((a, b) => a + Number(b), 0);
         const leftBottom = binary[5][0] + binary[6][0];
         const rightTop = binary[1][4] + binary[2][4];
         if (top >= 3 && mid >= 2 && bottom >= 3 && leftBottom >= 1 && rightTop >= 1) score += 15;
       }
       if (Number(digit) === 8) {
-        const left = binary.reduce((a, row) => a + row[0], 0);
-        const right = binary.reduce((a, row) => a + row[4], 0);
-        const mid = binary[3].reduce((a, b) => a + b, 0);
-        if (left >= 3 && right >= 3 && mid >= 2) score += 12;
+        const left = binary.reduce<number>((a, row) => a + Number(row[0]), 0);
+        const right = binary.reduce<number>((a, row) => a + Number(row[4]), 0);
+        const middle = binary[3].reduce<number>((a, b) => a + Number(b), 0);
+        if (left >= 3 && right >= 3 && middle >= 2) score += 12;
       }
 
       return { digit: Number(digit), score: clamp(score, 1, 100) };
