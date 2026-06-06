@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675">
+<defs><linearGradient id="sky" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="#dbeafe"/><stop offset="100%" stop-color="#94a3b8"/></linearGradient></defs>
+<rect width="1200" height="675" rx="36" fill="url(#sky)"/>
+<rect x="0" y="360" width="1200" height="315" fill="#334155"/>
+<g opacity="0.95">
+<rect x="95" y="470" width="130" height="34" rx="8" fill="white"/>
+<rect x="285" y="470" width="130" height="34" rx="8" fill="white"/>
+<rect x="475" y="470" width="130" height="34" rx="8" fill="white"/>
+<rect x="665" y="470" width="130" height="34" rx="8" fill="white"/>
+<rect x="855" y="470" width="130" height="34" rx="8" fill="white"/>
+</g>
+<rect x="200" y="150" width="250" height="390" rx="30" fill="#fef08a" opacity="0.18" stroke="#facc15" stroke-width="8"/>
+<text x="325" y="132" font-family="Arial" font-size="28" font-weight="800" text-anchor="middle" fill="#b91c1c">Жаяу жүргінші</text>
+<circle cx="325" cy="245" r="45" fill="#1d4ed8"/>
+<rect x="285" y="292" width="80" height="120" rx="22" fill="#1e40af"/>
+<rect x="235" y="315" width="42" height="115" rx="18" fill="#2563eb" transform="rotate(16 256 372)"/>
+<rect x="373" y="315" width="42" height="115" rx="18" fill="#2563eb" transform="rotate(-16 394 372)"/>
+<rect x="285" y="405" width="34" height="120" rx="16" fill="#0f172a" transform="rotate(8 302 465)"/>
+<rect x="334" y="405" width="34" height="120" rx="16" fill="#0f172a" transform="rotate(-8 351 465)"/>
+<rect x="255" y="520" width="70" height="18" rx="9" fill="#020617"/>
+<rect x="330" y="520" width="70" height="18" rx="9" fill="#020617"/>
+<rect x="570" y="430" width="510" height="125" rx="34" fill="#ef4444" opacity="0.28" stroke="#ef4444" stroke-width="4"/>
+<text x="825" y="500" text-anchor="middle" font-family="Arial" font-size="34" font-weight="800" fill="white">Қауіпті аймақ</text>
+<rect x="745" y="70" width="365" height="130" rx="28" fill="white" opacity="0.92"/>
+<text x="775" y="115" font-family="Arial" font-size="26" font-weight="800" fill="#0f172a">Камера талдауы</text>
+<text x="775" y="155" font-family="Arial" font-size="21" fill="#dc2626">Нәтиже: тоқтау қажет</text>
+<text x="775" y="185" font-family="Arial" font-size="18" fill="#475569">Адам қауіпті аймақта анықталды</text>
+</svg>
