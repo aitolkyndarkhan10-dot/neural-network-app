@@ -3763,7 +3763,7 @@ function EmotionLearningTool() {
       return;
     }
 
-    const expressions = result.expressions as Record<string, number>;
+    const expressions = result.expressions as unknown as Record<string, number>;
     const normalized = {
       happy: Math.round((expressions.happy || 0) * 100),
       neutral: Math.round((expressions.neutral || 0) * 100),
@@ -3823,7 +3823,7 @@ function EmotionLearningTool() {
         return;
       }
 
-      const expressions = result.expressions as Record<string, number>;
+      const expressions = result.expressions as unknown as Record<string, number>;
       const normalized = {
         happy: Math.round((expressions.happy || 0) * 100),
         neutral: Math.round((expressions.neutral || 0) * 100),
