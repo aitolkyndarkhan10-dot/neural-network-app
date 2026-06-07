@@ -1196,7 +1196,7 @@ function TopicOutput({
   if (outputType === "image") {
     return (
       <div className="space-y-4">
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           <VisualImage
             src="/visuals/image-processing.svg"
             title="Сурет өңдеу жолы"
@@ -3278,6 +3278,14 @@ function AIToolsPage() {
             title="4. Камера → эмоция"
             text="Камерадағы бейнені талдау идеясын түсіндіретін эмоция анықтау симуляторы."
           />
+          <SmallInfo
+            title="5. Мәтін → сурет"
+            text="ЖИ суретті шу, контур, пішін және деталь кезеңдері арқылы қалай жасайтынын көрсетеді."
+          />
+          <SmallInfo
+            title="6. Мәтін → видео"
+            text="ЖИ видеоны кадрлар арқылы жасап, қозғалысты қалай байланыстыратынын түсіндіреді."
+          />
         </div>
       </SectionCard>
 
@@ -3286,6 +3294,8 @@ function AIToolsPage() {
         <SpeechToTextTool />
         <OCRLearningTool />
         <EmotionLearningTool />
+        <ImageGenerationLearningTool />
+        <VideoGenerationLearningTool />
       </div>
 
       <SectionCard title="Бұл құралдар не үшін керек?" accent="from-slate-700 to-slate-900">
@@ -3923,6 +3933,291 @@ function EmotionLearningTool() {
       </div>
 
       <div className="mt-4 rounded-2xl bg-slate-100 px-4 py-3 text-sm text-slate-700">{status}</div>
+    </div>
+  );
+}
+
+
+
+function ImageGenerationLearningTool() {
+  const [prompt, setPrompt] = useState("Болашақтағы ақылды қала");
+  const [step, setStep] = useState(0);
+  const [style, setStyle] = useState<"realistic" | "cartoon" | "pixel">("realistic");
+
+  const stages = [
+    { title: "1-қадам. Кездейсоқ шу", explain: "Генерация алдымен ретсіз нүктелерден басталады. Бұл — бастапқы шу." },
+    { title: "2-қадам. Мағына іздеу", explain: "Модель мәтіндегі негізгі белгілерді іздейді: объект, стиль, түс, кеңістік." },
+    { title: "3-қадам. Контур мен пішін", explain: "Негізгі контурлар, үлкен объектілер және композиция пайда болады." },
+    { title: "4-қадам. Деталь қосу", explain: "Түстер, жарық, көлеңке және ұсақ бөліктер толықтырылады." },
+    { title: "5-қадам. Дайын сурет", explain: "Соңында модель мәтінге сәйкес ең ықтимал суретті шығарады." },
+  ];
+
+  const current = stages[step];
+
+  const palette =
+    style === "realistic"
+      ? { a: "#0f172a", b: "#38bdf8", c: "#facc15" }
+      : style === "cartoon"
+      ? { a: "#7c3aed", b: "#fb7185", c: "#fef08a" }
+      : { a: "#111827", b: "#22c55e", c: "#f97316" };
+
+  return (
+    <div className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="mb-4">
+        <div className="text-2xl font-black text-slate-900">🎨 ЖИ суретті қалай жасайды?</div>
+        <p className="mt-2 text-sm leading-6 text-slate-700">
+          Бұл оқу симуляторы мәтіннен сурет жасау процесін кезең-кезеңімен көрсетеді.
+          Нақты генерация емес, нейрондық желінің жұмыс идеясын түсіндіретін визуализация.
+        </p>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[1fr_260px]">
+        <div>
+          <label className="text-sm font-bold text-slate-700">Prompt / сипаттама</label>
+          <input
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            className="mt-2 w-full rounded-2xl border border-slate-300 p-3 text-sm"
+            placeholder="Мысалы: ғарыштағы мектеп, робот мұғалім..."
+          />
+
+          <div className="mt-4">
+            <label className="text-sm font-bold text-slate-700">Стиль</label>
+            <select
+              value={style}
+              onChange={(e) => setStyle(e.target.value as any)}
+              className="mt-2 w-full rounded-2xl border border-slate-300 p-3 text-sm"
+            >
+              <option value="realistic">Реалистік</option>
+              <option value="cartoon">Мультфильм</option>
+              <option value="pixel">Pixel art</option>
+            </select>
+          </div>
+
+          <RangeField label="Генерация кезеңі" value={step} min={0} max={4} step={1} onChange={setStep} />
+
+          <div className="mt-4 rounded-2xl bg-slate-50 p-4">
+            <div className="font-black text-slate-900">{current.title}</div>
+            <p className="mt-2 text-sm leading-6 text-slate-700">{current.explain}</p>
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-slate-200 bg-slate-950 p-3">
+          <svg viewBox="0 0 260 260" className="w-full rounded-2xl bg-slate-900">
+            <defs>
+              <radialGradient id="imgGenGlow" cx="50%" cy="45%" r="70%">
+                <stop offset="0%" stopColor={palette.b} stopOpacity="0.85" />
+                <stop offset="55%" stopColor={palette.a} stopOpacity="0.7" />
+                <stop offset="100%" stopColor="#020617" stopOpacity="1" />
+              </radialGradient>
+            </defs>
+
+            <rect width="260" height="260" fill="url(#imgGenGlow)" />
+
+            {step === 0 &&
+              Array.from({ length: 120 }).map((_, i) => (
+                <circle
+                  key={i}
+                  cx={(i * 47) % 260}
+                  cy={(i * 83) % 260}
+                  r={(i % 4) + 1}
+                  fill={i % 3 === 0 ? palette.b : i % 3 === 1 ? palette.c : "white"}
+                  opacity="0.55"
+                />
+              ))}
+
+            {step >= 1 && (
+              <>
+                <circle cx="75" cy="82" r="28" fill={palette.c} opacity="0.85" />
+                <rect x="42" y="145" width="178" height="62" rx="18" fill={palette.b} opacity="0.35" />
+                <path d="M35 175 C80 100, 135 95, 224 170" fill="none" stroke="white" strokeWidth="5" opacity="0.55" />
+              </>
+            )}
+
+            {step >= 2 && (
+              <>
+                <rect x="76" y="102" width="108" height="88" rx="16" fill="white" opacity="0.9" />
+                <path d="M76 105 L130 55 L184 105" fill={palette.c} opacity="0.95" />
+                <rect x="116" y="145" width="28" height="45" rx="6" fill={palette.a} opacity="0.9" />
+              </>
+            )}
+
+            {step >= 3 && (
+              <>
+                <circle cx="105" cy="132" r="8" fill={palette.b} />
+                <circle cx="155" cy="132" r="8" fill={palette.b} />
+                <path d="M98 212 C125 230, 160 230, 190 212" fill="none" stroke={palette.c} strokeWidth="6" />
+                <circle cx="207" cy="65" r="12" fill="white" opacity="0.75" />
+                <circle cx="222" cy="88" r="6" fill="white" opacity="0.5" />
+              </>
+            )}
+
+            {step >= 4 && (
+              <>
+                <text x="130" y="238" textAnchor="middle" fill="white" fontSize="16" fontFamily="Arial" fontWeight="800">
+                  {prompt.slice(0, 22)}
+                </text>
+                <rect x="18" y="18" width="224" height="224" rx="26" fill="none" stroke="white" strokeWidth="3" opacity="0.5" />
+              </>
+            )}
+          </svg>
+
+          <div className="mt-3 rounded-2xl bg-white/10 p-3 text-sm leading-6 text-white">
+            Prompt → embedding → noise → denoising → image
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-5">
+        {stages.map((s, i) => (
+          <button
+            key={s.title}
+            onClick={() => setStep(i)}
+            className={
+              step === i
+                ? "rounded-2xl bg-violet-600 px-3 py-2 text-xs font-bold text-white"
+                : "rounded-2xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-200"
+            }
+          >
+            {i + 1}. {s.title.replace(/^\d-қадам\. /, "")}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function VideoGenerationLearningTool() {
+  const [scene, setScene] = useState("Жүгіріп келе жатқан робот");
+  const [frame, setFrame] = useState(0);
+  const [motion, setMotion] = useState(0.65);
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  useEffect(() => {
+    if (!isPlaying) return;
+    const timer = setInterval(() => {
+      setFrame((f) => (f + 1) % 6);
+    }, 550);
+    return () => clearInterval(timer);
+  }, [isPlaying]);
+
+  const stages = [
+    "1. Мәтін түсіндіріледі",
+    "2. Негізгі кадр жасалады",
+    "3. Қозғалыс бағыты есептеледі",
+    "4. Аралық кадрлар құрылады",
+    "5. Кадрлар біріктіріледі",
+    "6. Видео пайда болады",
+  ];
+
+  const x = 38 + frame * 28 * motion;
+  const y = 145 + Math.sin(frame * 0.9) * 16 * motion;
+
+  return (
+    <div className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="mb-4">
+        <div className="text-2xl font-black text-slate-900">🎥 ЖИ видеоны қалай жасайды?</div>
+        <p className="mt-2 text-sm leading-6 text-slate-700">
+          Видео генерациясында модель бір ғана сурет емес, бір-бірімен байланысқан бірнеше кадр жасайды.
+          Қозғалыс табиғи көрінуі үшін кадрлар арасындағы өзгеріс есептеледі.
+        </p>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[1fr_290px]">
+        <div>
+          <label className="text-sm font-bold text-slate-700">Видео сипаттамасы</label>
+          <input
+            value={scene}
+            onChange={(e) => setScene(e.target.value)}
+            className="mt-2 w-full rounded-2xl border border-slate-300 p-3 text-sm"
+            placeholder="Мысалы: теңіз жағасында ұшып жүрген дрон..."
+          />
+
+          <RangeField label="Қозғалыс қарқыны" value={motion} min={0.2} max={1} step={0.05} onChange={setMotion} />
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              onClick={() => setIsPlaying(!isPlaying)}
+              className="rounded-2xl bg-cyan-600 px-4 py-2 font-bold text-white hover:bg-cyan-700"
+            >
+              {isPlaying ? "⏸ Тоқтату" : "▶ Кадрларды ойнату"}
+            </button>
+            <button
+              onClick={() => {
+                setIsPlaying(false);
+                setFrame(0);
+              }}
+              className="rounded-2xl bg-slate-700 px-4 py-2 font-bold text-white hover:bg-slate-800"
+            >
+              ↺ Қайта бастау
+            </button>
+          </div>
+
+          <div className="mt-4 rounded-2xl bg-slate-50 p-4">
+            <div className="font-black text-slate-900">{stages[frame]}</div>
+            <p className="mt-2 text-sm leading-6 text-slate-700">
+              Қазіргі кадр: {frame + 1}/6. Видео — уақыт бойынша реттелген кадрлар тізбегі.
+              Нейрондық желі әр кадрдағы объект орнын, фонды және қозғалыс бағытын үйлестіреді.
+            </p>
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-slate-200 bg-slate-950 p-3">
+          <svg viewBox="0 0 290 220" className="w-full rounded-2xl bg-slate-900">
+            <rect width="290" height="220" fill="#020617" />
+            <path d="M0 165 C55 135, 105 190, 160 150 C205 120, 240 145, 290 115 L290 220 L0 220 Z" fill="#0f766e" opacity="0.75" />
+            <circle cx="235" cy="45" r="24" fill="#facc15" opacity="0.92" />
+
+            {Array.from({ length: 6 }).map((_, i) => (
+              <rect
+                key={i}
+                x={20 + i * 42}
+                y="186"
+                width="30"
+                height="18"
+                rx="5"
+                fill={i === frame ? "#38bdf8" : "#334155"}
+              />
+            ))}
+
+            <g transform={`translate(${x}, ${y})`}>
+              <circle cx="0" cy="-34" r="16" fill="#e2e8f0" />
+              <rect x="-15" y="-18" width="30" height="42" rx="10" fill="#38bdf8" />
+              <line x1="-13" y1="0" x2="-34" y2={8 + Math.sin(frame) * 8} stroke="#e2e8f0" strokeWidth="7" strokeLinecap="round" />
+              <line x1="13" y1="0" x2="33" y2={-5 - Math.sin(frame) * 8} stroke="#e2e8f0" strokeWidth="7" strokeLinecap="round" />
+              <line x1="-8" y1="24" x2="-22" y2={48 + Math.sin(frame) * 7} stroke="#e2e8f0" strokeWidth="7" strokeLinecap="round" />
+              <line x1="8" y1="24" x2="25" y2={46 - Math.sin(frame) * 7} stroke="#e2e8f0" strokeWidth="7" strokeLinecap="round" />
+            </g>
+
+            <text x="145" y="24" textAnchor="middle" fill="white" fontSize="14" fontFamily="Arial" fontWeight="800">
+              {scene.slice(0, 28)}
+            </text>
+          </svg>
+
+          <div className="mt-3 rounded-2xl bg-white/10 p-3 text-sm leading-6 text-white">
+            Prompt → keyframes → motion → frames → video
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-2 md:grid-cols-3">
+        {stages.map((s, i) => (
+          <button
+            key={s}
+            onClick={() => {
+              setIsPlaying(false);
+              setFrame(i);
+            }}
+            className={
+              frame === i
+                ? "rounded-2xl bg-cyan-600 px-3 py-2 text-xs font-bold text-white"
+                : "rounded-2xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-200"
+            }
+          >
+            {s}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
