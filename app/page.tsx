@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import * as faceapi from "face-api.js";
 
 declare global {
   interface Window {
@@ -8,6 +9,9 @@ declare global {
     pyodideInstance?: any;
     AudioContext?: typeof AudioContext;
     webkitAudioContext?: typeof AudioContext;
+    SpeechRecognition?: any;
+    webkitSpeechRecognition?: any;
+    Tesseract?: any;
   }
 }
 
@@ -22,6 +26,7 @@ type MenuKey =
   | "sound"
   | "sensors"
   | "camera"
+  | "aiTools"
   | "practice";
 
 type ActivationName = "sigmoid" | "relu" | "tanh" | "linear";
@@ -576,6 +581,7 @@ function Navbar({
     { key: "sound", label: "Дыбыс" },
     { key: "sensors", label: "Ауа райы / Денсаулық" },
     { key: "camera", label: "Камера" },
+    { key: "aiTools", label: "AI құралдар" },
     { key: "practice", label: "Практика" },
   ];
 
@@ -877,6 +883,7 @@ function AnimatedSignalChart({
 function LiveCameraPreview() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [status, setStatus] = useState("Камера әлі қосылмаған");
   const [captured, setCaptured] = useState(false);
@@ -890,7 +897,7 @@ function LiveCameraPreview() {
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
       }
-      setStatus("Камера қосылды. Енді кадрды суретке түсіріп, сұр түске айналдыруға болады.");
+      setStatus("Камера қосылды. Енді кадрды суретке түсіріп немесе дайын сурет жүктеуге болады.");
     } catch {
       setStatus("Камераға рұқсат берілмеді. Браузердің адрес жолағынан камера рұқсатын қосыңыз.");
     }
@@ -907,7 +914,34 @@ function LiveCameraPreview() {
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     setCaptured(true);
     setIsGray(false);
-    setStatus("Кадр суретке түсірілді. Бұл кадрды модель өңдей алатын сурет ретінде қарастыруға болады.");
+    setStatus("Кадр суретке түсірілді. Енді оны сұр түске айналдыруға болады.");
+  };
+
+  const uploadImage = (file: File | undefined) => {
+    if (!file) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (!canvas || !ctx) return;
+
+    const img = new Image();
+    img.onload = () => {
+      canvas.width = 640;
+      canvas.height = 360;
+      ctx.fillStyle = "white";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      const scale = Math.min(canvas.width / img.width, canvas.height / img.height);
+      const w = img.width * scale;
+      const h = img.height * scale;
+      const x = (canvas.width - w) / 2;
+      const y = (canvas.height - h) / 2;
+      ctx.drawImage(img, x, y, w, h);
+
+      setCaptured(true);
+      setIsGray(false);
+      setStatus("Сурет жүктелді. Бұл суретті де нейрондық желі өңдей алатын кадр ретінде қарастыруға болады.");
+    };
+    img.src = URL.createObjectURL(file);
   };
 
   const makeGray = () => {
@@ -925,7 +959,7 @@ function LiveCameraPreview() {
     }
     ctx.putImageData(img, 0, 0);
     setIsGray(true);
-    setStatus("Кадр сұр түске айналды. Бұл image processing-тегі негізгі алдын ала өңдеу қадамы.");
+    setStatus("Сурет сұр түске айналды. Бұл — image processing-тегі алдын ала өңдеу қадамы.");
   };
 
   const stopCamera = () => {
@@ -938,26 +972,40 @@ function LiveCameraPreview() {
   return (
     <div className="space-y-4 rounded-3xl border border-slate-200 bg-white p-4">
       <div>
-        <div className="font-bold text-slate-900">Нақты камерамен тәжірибе</div>
+        <div className="font-bold text-slate-900">Камерамен және дайын суретпен тәжірибе</div>
         <div className="text-sm leading-6 text-slate-600">
-          Камера кадрын алып, оны сурет ретінде өңдеуге болады: суретке түсіру, сұр түске ауыстыру және камераны тоқтату.
+          Камера кадрын алуға немесе компьютерден сурет жүктеуге болады. Кейін суретті сұр түске айналдырып, өңдеу қадамын көресіз.
         </div>
       </div>
+
       <video ref={videoRef} className="aspect-video w-full rounded-2xl bg-slate-900 object-cover" playsInline muted />
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => uploadImage(e.target.files?.[0])}
+      />
+
       <div className="flex flex-wrap gap-2">
         <button onClick={startCamera} className="rounded-2xl bg-slate-900 px-4 py-2 font-bold text-white hover:bg-slate-800">📷 Камераны қосу</button>
         <button onClick={captureFrame} className="rounded-2xl bg-blue-600 px-4 py-2 font-bold text-white hover:bg-blue-700">🖼 Суретке түсіру</button>
+        <button onClick={() => fileInputRef.current?.click()} className="rounded-2xl bg-violet-600 px-4 py-2 font-bold text-white hover:bg-violet-700">⬆ Сурет жүктеу</button>
         <button onClick={makeGray} className="rounded-2xl bg-slate-600 px-4 py-2 font-bold text-white hover:bg-slate-700">⚫ Сұр түске айналдыру</button>
         <button onClick={stopCamera} className="rounded-2xl bg-red-600 px-4 py-2 font-bold text-white hover:bg-red-700">⏹ Тоқтату</button>
       </div>
+
       <canvas ref={canvasRef} className={captured ? "aspect-video w-full rounded-2xl border border-slate-200 bg-white object-cover" : "hidden"} />
+
       {captured && (
-        <Formula>{`Камера кадры өңделді:
-1) кадр алынды
+        <Formula>{`Кадр өңделді:
+1) сурет алынды
 2) пиксельдер оқылды
 3) ${isGray ? "RGB → Gray түрлендіру орындалды" : "сұр түске айналдыру әлі орындалған жоқ"}
 4) келесі қадам: объектіні анықтау`}</Formula>
       )}
+
       <div className="rounded-2xl bg-slate-100 px-4 py-3 text-sm text-slate-700">{status}</div>
     </div>
   );
@@ -1227,12 +1275,13 @@ function HomePage({ onStart }: { onStart: (menu: MenuKey) => void }) {
           </div>
 
           <h1 className="text-4xl font-black tracking-tight text-slate-900 md:text-5xl">
-            Нейрондық желілерді интерактивті түрде түсіндіретін оқу платформасы
+            Нейрондық желіні көріп, өзгертіп, түсінетін интерактивті зертхана
           </h1>
 
           <p className="text-lg leading-8 text-slate-700">
-            Бұл сайтта оқушы нейрондық желіге дерек қалай кіретінін, нейрон оны қалай өңдейтінін,
-            салмақ пен activation функциясының не істейтінін және нәтиженің неге солай шыққанын көреді.
+            Бұл платформада нейрондық желі құр мәтінмен емес, қозғалыс, график, тәжірибе және нақты нәтиже арқылы түсіндіріледі.
+            Оқушы дерек қалай кіретінін, салмақтардың қалай әсер ететінін, activation функциясының нәтижені қалай өзгертетінін
+            және модельдің неге дәл сол шешімді таңдағанын көзбен көреді.
           </p>
 
           <div className="grid gap-3 sm:grid-cols-3">
@@ -1371,6 +1420,577 @@ y — шығыс нәтиже`}</Formula>
   );
 }
 
+
+
+
+function PlaygroundLikeSimulator() {
+  const [dataset, setDataset] = useState<"circle" | "spiral" | "xor" | "clusters">("circle");
+  const [activation, setActivation] = useState<"tanh" | "sigmoid" | "relu">("tanh");
+  const [learningRate, setLearningRate] = useState(0.03);
+  const [regularization, setRegularization] = useState<"none" | "L2">("L2");
+  const [regularizationRate, setRegularizationRate] = useState(0.003);
+  const [hiddenLayers, setHiddenLayers] = useState(2);
+  const [neurons, setNeurons] = useState(8);
+  const [noise, setNoise] = useState(5);
+  const [batchSize, setBatchSize] = useState(12);
+  const [trainRatio, setTrainRatio] = useState(40);
+  const [epoch, setEpoch] = useState(0);
+  const [isRunning, setIsRunning] = useState(false);
+  const [controlVersion, setControlVersion] = useState(0);
+  const bumpControls = () => setControlVersion((v) => v + 1);
+  const [showTest, setShowTest] = useState(false);
+  const [discretize, setDiscretize] = useState(false);
+  const [features, setFeatures] = useState({
+    x: true,
+    y: true,
+    x2: true,
+    y2: true,
+    xy: true,
+    sinX: true,
+    sinY: true,
+    cosX: false,
+    cosY: false,
+  });
+
+  useEffect(() => {
+    if (!isRunning) return;
+    const timer = setInterval(() => setEpoch((e) => Math.min(e + 7, 999999)), 120);
+    return () => clearInterval(timer);
+  }, [isRunning]);
+
+  const activateLocal = (v: number) => {
+    if (activation === "sigmoid") return 1 / (1 + Math.exp(-v));
+    if (activation === "relu") return Math.max(0, v);
+    return Math.tanh(v);
+  };
+
+  const getLabel = (x: number, y: number): 0 | 1 => {
+    if (dataset === "circle") return Math.sqrt(x * x + y * y) < 0.48 ? 1 : 0;
+    if (dataset === "xor") return x * y > 0 ? 1 : 0;
+    if (dataset === "clusters") return (x + 0.15) * 0.85 + y * 0.55 + Math.sin(x * 4) * 0.18 > 0 ? 1 : 0;
+
+    const angle = Math.atan2(y, x);
+    const radius = Math.sqrt(x * x + y * y);
+    return Math.sin(angle * 2.2 + radius * 7) > 0 ? 1 : 0;
+  };
+
+  const data = useMemo(() => {
+    const points: Array<{ x: number; y: number; label: 0 | 1; test: boolean }> = [];
+    for (let i = 0; i < 160; i++) {
+      let x = Math.random() * 2 - 1;
+      let y = Math.random() * 2 - 1;
+      x = clamp(x + (Math.random() - 0.5) * (noise / 90), -1, 1);
+      y = clamp(y + (Math.random() - 0.5) * (noise / 90), -1, 1);
+      points.push({ x, y, label: getLabel(x, y), test: i > (trainRatio / 100) * 160 });
+    }
+    return points;
+  }, [dataset, noise, trainRatio]);
+
+  const predict = (x: number, y: number) => {
+    let z = 0;
+    const complexity = hiddenLayers * 0.52 + neurons * 0.08 + epoch * learningRate * 0.45 + controlVersion * 0.035;
+    const featureShift = Math.sin(controlVersion * 0.7) * 0.16;
+
+    if (dataset === "circle") z = 0.48 - Math.sqrt((x + featureShift) * (x + featureShift) + (y - featureShift) * (y - featureShift));
+    if (dataset === "xor") z = (x + featureShift) * (y - featureShift);
+    if (dataset === "clusters") z = (x + 0.15 + featureShift) * 0.85 + (y - featureShift) * 0.55 + Math.sin((x + featureShift) * 4) * 0.18;
+    if (dataset === "spiral") {
+      const angle = Math.atan2(y - featureShift, x + featureShift);
+      const radius = Math.sqrt((x + featureShift) * (x + featureShift) + (y - featureShift) * (y - featureShift));
+      z = Math.sin(angle * 2.2 + radius * 7);
+    }
+
+    const featureBoost =
+      (features.x ? 0.34 * (x + featureShift) : 0) +
+      (features.y ? 0.34 * (y - featureShift) : 0) +
+      (features.x2 ? 0.46 * (x * x - 0.35) : 0) -
+      (features.y2 ? 0.42 * (y * y - 0.35) : 0) +
+      (features.xy ? 0.62 * x * y : 0) +
+      (features.sinX ? 0.34 * Math.sin(x * 4) : 0) +
+      (features.sinY ? 0.34 * Math.sin(y * 4) : 0) +
+      (features.cosX ? 0.28 * Math.cos(x * 5) : 0) +
+      (features.cosY ? 0.28 * Math.cos(y * 5) : 0);
+
+    const regPenalty = regularization === "L2" ? 1 - regularizationRate * 8 : 1;
+    return activateLocal((z + featureBoost) * complexity * regPenalty * 3);
+  };
+
+  const grid = useMemo(() => {
+    const cells: Array<{ x: number; y: number; v: number }> = [];
+    for (let gy = 0; gy < 46; gy++) {
+      for (let gx = 0; gx < 46; gx++) {
+        const x = -1 + (gx / 45) * 2;
+        const y = -1 + (gy / 45) * 2;
+        cells.push({ x: gx, y: gy, v: predict(x, y) });
+      }
+    }
+    return cells;
+  }, [dataset, activation, hiddenLayers, neurons, epoch, features, regularization, regularizationRate, learningRate, noise, batchSize, trainRatio, controlVersion]);
+
+  const accuracy = useMemo(() => {
+    let correct = 0;
+    data.forEach((p) => {
+      const pred = predict(p.x, p.y) > 0 ? 1 : 0;
+      if (pred === p.label) correct++;
+    });
+    return Math.round((correct / data.length) * 100);
+  }, [data, dataset, activation, hiddenLayers, neurons, epoch, features, regularization, regularizationRate, learningRate, noise, batchSize, trainRatio, controlVersion]);
+
+  const loss = Math.max(0.04, 1 - accuracy / 100 + 0.05);
+  const testLoss = Math.max(0.05, loss + (showTest ? 0.02 : 0.04));
+
+  const featureList = [
+    { key: "x", label: "X₁" },
+    { key: "y", label: "X₂" },
+    { key: "x2", label: "X₁²" },
+    { key: "y2", label: "X₂²" },
+    { key: "xy", label: "X₁X₂" },
+    { key: "sinX", label: "sin(X₁)" },
+    { key: "sinY", label: "sin(X₂)" },
+    { key: "cosX", label: "cos(X₁)" },
+    { key: "cosY", label: "cos(X₂)" },
+  ] as const;
+
+  const datasetCards = [
+    { key: "circle", icon: "◉", title: "Шеңбер" },
+    { key: "xor", icon: "×", title: "XOR" },
+    { key: "clusters", icon: "••", title: "Кластер" },
+    { key: "spiral", icon: "↻", title: "Спираль" },
+  ] as const;
+
+  const layerXs = hiddenLayers === 1 ? [490] : hiddenLayers === 2 ? [390, 650] : [330, 540, 750];
+  const inputYs = [85, 185, 285, 385];
+
+  return (
+    <SectionCard title="Нейрондық желі Playground симуляторы" accent="from-teal-600 to-amber-500">
+      <div className="overflow-hidden rounded-[34px] border border-slate-200 bg-[#fbfbf8] shadow-sm">
+        <div className="grid gap-4 border-b border-slate-200 bg-white p-4 md:grid-cols-[190px_1fr] xl:grid-cols-[220px_1fr_170px_170px_170px_170px_170px]">
+          <div className="flex items-center gap-4">
+            <button onClick={() => setEpoch(0)} className="text-4xl font-black text-slate-700">↻</button>
+            <button
+              onClick={() => setIsRunning(!isRunning)}
+              className="flex h-20 w-20 items-center justify-center rounded-full bg-teal-950 text-4xl font-black text-white shadow-lg"
+            >
+              {isRunning ? "Ⅱ" : "▶"}
+            </button>
+          </div>
+
+          <div>
+            <div className="text-sm font-bold text-slate-500">Epoch</div>
+            <div className="font-mono text-4xl font-black text-slate-900">{String(epoch).padStart(6, "0")}</div>
+          </div>
+
+          <label className="space-y-1">
+            <div className="text-sm font-bold text-slate-500">Learning rate</div>
+            <select value={learningRate} onChange={(e) => { setLearningRate(Number(e.target.value)); setEpoch(0); bumpControls(); }} className="w-full border-b border-slate-300 bg-white py-2">
+              <option value={0.01}>0.01</option>
+              <option value={0.03}>0.03</option>
+              <option value={0.1}>0.1</option>
+            </select>
+          </label>
+
+          <label className="space-y-1">
+            <div className="text-sm font-bold text-slate-500">Activation</div>
+            <select value={activation} onChange={(e) => { setActivation(e.target.value as any); setEpoch(0); bumpControls(); }} className="w-full border-b border-slate-300 bg-white py-2">
+              <option value="tanh">Tanh</option>
+              <option value="sigmoid">Sigmoid</option>
+              <option value="relu">ReLU</option>
+            </select>
+          </label>
+
+          <label className="space-y-1">
+            <div className="text-sm font-bold text-slate-500">Regularization</div>
+            <select value={regularization} onChange={(e) => { setRegularization(e.target.value as any); setEpoch(0); bumpControls(); }} className="w-full border-b border-slate-300 bg-white py-2">
+              <option value="L2">L2</option>
+              <option value="none">None</option>
+            </select>
+          </label>
+
+          <label className="space-y-1">
+            <div className="text-sm font-bold text-slate-500">Regularization rate</div>
+            <select value={regularizationRate} onChange={(e) => { setRegularizationRate(Number(e.target.value)); setEpoch(0); bumpControls(); }} className="w-full border-b border-slate-300 bg-white py-2">
+              <option value={0}>0</option>
+              <option value={0.001}>0.001</option>
+              <option value={0.003}>0.003</option>
+              <option value={0.01}>0.01</option>
+            </select>
+          </label>
+
+          <label className="space-y-1">
+            <div className="text-sm font-bold text-slate-500">Problem type</div>
+            <div className="border-b border-slate-300 py-2 font-bold">Classification</div>
+          </label>
+        </div>
+
+        <div className="grid gap-4 p-5 xl:grid-cols-[105px_118px_minmax(500px,1fr)_275px]">
+          <div className="space-y-5">
+            <div>
+              <h3 className="text-base font-black text-slate-900">DATA</h3>
+              <p className="mt-1 text-xs leading-4 text-slate-600">Dataset</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              {datasetCards.map((d) => (
+                <button
+                  key={d.key}
+                  title={d.title}
+                  onClick={() => {
+                    setDataset(d.key); bumpControls();
+                    setEpoch(0);
+                  }}
+                  className={
+                    dataset === d.key
+                      ? "h-12 rounded-xl border-4 border-slate-900 bg-white text-xl font-black text-teal-800 shadow"
+                      : "h-12 rounded-xl border border-slate-200 bg-white text-xl font-black text-slate-400"
+                  }
+                >
+                  {d.icon}
+                </button>
+              ))}
+            </div>
+
+            <RangeField label="Оқыту дерегі" value={trainRatio} min={20} max={80} step={5} unit="%" onChange={(v) => { setTrainRatio(v); setEpoch(0); bumpControls(); }} />
+            <RangeField label="Шу" value={noise} min={0} max={30} step={1} onChange={(v) => { setNoise(v); setEpoch(0); bumpControls(); }} />
+            <RangeField label="Batch" value={batchSize} min={4} max={32} step={4} onChange={(v) => { setBatchSize(v); setEpoch(0); bumpControls(); }} />
+
+            <button
+              onClick={() => {
+                setEpoch(0);
+                setIsRunning(false);
+              }}
+              className="w-full rounded-xl border border-teal-700 bg-white px-4 py-3 text-sm font-black text-teal-900 hover:bg-teal-50"
+            >
+              ҚАЙТА ЖАСАУ
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-base font-black text-slate-900">FEATURES</h3>
+              <p className="mt-1 text-[11px] leading-4 text-slate-600">Белгілер</p>
+            </div>
+
+            {featureList.map((f) => (
+              <button
+                key={f.key}
+                onClick={() => { setFeatures((old) => ({ ...old, [f.key]: !old[f.key] })); setEpoch(0); bumpControls(); }}
+                className="grid w-full grid-cols-[48px_1fr] items-center gap-2 rounded-xl bg-transparent py-0.5 text-left"
+              >
+                <span className="text-right text-xs font-black text-slate-700">{f.label}</span>
+                <span
+                  className={
+                    features[f.key]
+                      ? "h-8 w-12 rounded-lg bg-gradient-to-r from-amber-300 to-teal-500 shadow"
+                      : "h-8 w-12 rounded-lg bg-slate-200 opacity-60"
+                  }
+                />
+              </button>
+            ))}
+          </div>
+
+          <div className="space-y-4">
+            <div className="flex items-center justify-center gap-4">
+              <button onClick={() => { setHiddenLayers(Math.max(1, hiddenLayers - 1)); setEpoch(0); bumpControls(); }} className="h-11 w-11 rounded-full bg-white text-2xl font-black shadow">−</button>
+              <div className="text-xl font-black text-slate-900">{hiddenLayers} HIDDEN LAYERS</div>
+              <button onClick={() => { setHiddenLayers(Math.min(3, hiddenLayers + 1)); setEpoch(0); bumpControls(); }} className="h-11 w-11 rounded-full bg-white text-2xl font-black shadow">+</button>
+            </div>
+
+            <div className="flex items-center justify-center gap-5">
+              <button onClick={() => { setNeurons(Math.max(3, neurons - 1)); setEpoch(0); bumpControls(); }} className="h-10 w-10 rounded-full bg-white text-2xl font-black shadow">−</button>
+              <div className="rounded-2xl bg-white px-6 py-2 text-lg font-black shadow">{neurons} neurons</div>
+              <button onClick={() => { setNeurons(Math.min(12, neurons + 1)); setEpoch(0); bumpControls(); }} className="h-10 w-10 rounded-full bg-white text-2xl font-black shadow">+</button>
+            </div>
+
+            <svg viewBox="0 0 980 520" className="min-h-[500px] w-full rounded-[32px] bg-white shadow">
+              {inputYs.map((y, i) => (
+                <g key={`input-${i}`}>
+                  <text x="25" y={y + 7} fontSize="23" fontFamily="Arial" fontWeight="800" fill="#64748b">
+                    {i === 0 ? "X₁" : i === 1 ? "X₂" : i === 2 ? "X₁²" : "X₁X₂"}
+                  </text>
+                  <rect x="75" y={y - 18} width="38" height="38" rx="7" fill={i % 2 === 0 ? "#14b8a6" : "#f59e0b"} opacity="0.95" />
+                </g>
+              ))}
+
+              {layerXs.map((x, layer) =>
+                Array.from({ length: neurons }).map((_, i) => {
+                  const y = 45 + i * (420 / Math.max(1, neurons - 1));
+                  return (
+                    <g key={`h-${layer}-${i}`} className="transition-all duration-500">
+                      <rect x={x - 22} y={y - 22} width="48" height="48" rx="8" fill="white" stroke="#0f172a" strokeWidth="3" />
+                      <rect x={x - 16} y={y - 16} width="36" height="36" rx="6" fill={i % 2 === 0 ? "#14b8a6" : "#f59e0b"} opacity="0.72" />
+                    </g>
+                  );
+                })
+              )}
+
+              {[185, 315].map((y, i) => (
+                <g key={`out-${i}`}>
+                  <rect x="905" y={y - 22} width="48" height="48" rx="8" fill="white" stroke="#0f172a" strokeWidth="3" />
+                  <rect x="841" y={y - 16} width="36" height="36" rx="6" fill={i === 0 ? "#f59e0b" : "#14b8a6"} opacity="0.85" />
+                </g>
+              ))}
+
+              {inputYs.flatMap((y1, a) =>
+                Array.from({ length: neurons }).map((_, b) => {
+                  const y2 = 45 + b * (420 / Math.max(1, neurons - 1));
+                  return <line key={`l0-${a}-${b}`} x1="113" y1={y1} x2={layerXs[0] - 22} y2={y2} stroke={b % 2 === 0 ? "#14b8a6" : "#f59e0b"} strokeWidth={1 + ((epoch + b) % 4)} opacity="0.34" />;
+                })
+              )}
+
+              {layerXs.slice(0, -1).flatMap((x, layer) =>
+                Array.from({ length: neurons }).flatMap((_, a) =>
+                  Array.from({ length: neurons }).map((_, b) => {
+                    const x1 = x + 26;
+                    const x2 = layerXs[layer + 1] - 22;
+                    const y1 = 45 + a * (420 / Math.max(1, neurons - 1));
+                    const y2 = 45 + b * (420 / Math.max(1, neurons - 1));
+                    return <line key={`lh-${layer}-${a}-${b}`} x1={x1} y1={y1} x2={x2} y2={y2} stroke={b % 2 === 0 ? "#14b8a6" : "#f59e0b"} strokeWidth={1 + ((epoch + a + b) % 4)} opacity="0.24" />;
+                  })
+                )
+              )}
+
+              {Array.from({ length: neurons }).flatMap((_, a) =>
+                [185, 315].map((y2, b) => {
+                  const lastX = layerXs[layerXs.length - 1];
+                  const y1 = 45 + a * (420 / Math.max(1, neurons - 1));
+                  return <line key={`lo-${a}-${b}`} x1={lastX + 26} y1={y1} x2="905" y2={y2} stroke={b === 0 ? "#f59e0b" : "#14b8a6"} strokeWidth={1 + ((epoch + a + b) % 4)} opacity="0.35" />;
+                })
+              )}
+
+              <circle r="8" fill="#facc15">
+                <animateMotion dur="2.2s" repeatCount="indefinite" path={`M 95 170 C 180 130, 230 100, ${layerXs[0]} 115 C 430 150, 560 180, ${layerXs[layerXs.length - 1]} 150 C 820 170, 870 225, 930 315`} />
+              </circle>
+
+              <text x="285" y="505" fontSize="17" fontFamily="Arial" fill="#64748b" fontStyle="italic">
+                Сызық қалыңдығы — салмақ, сары нүкте — ақпарат сигналы
+              </text>
+            </svg>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-xl font-black text-slate-900">OUTPUT</h3>
+              <div className="mt-2 text-xs leading-5 text-slate-700">
+                Test loss {testLoss.toFixed(3)}<br />
+                Training loss {loss.toFixed(3)}
+              </div>
+<div className="mt-3 rounded-2xl bg-white p-2 text-xs font-bold text-slate-800 shadow-sm">
+                Қазіргі баптау: {hiddenLayers} қабат · {neurons} нейрон · {activation} · дәлдік {accuracy}%
+              </div>
+            </div>
+
+            <svg viewBox="0 0 280 280" className="mx-auto w-[250px] rounded-3xl border border-slate-200 bg-white">
+              {grid.map((c, i) => {
+                const teal = c.v > 0;
+                const intensity = discretize ? 0.68 : Math.min(0.8, Math.abs(c.v) * 0.68 + 0.08);
+                return (
+                  <rect
+                    key={i}
+                    x={c.x * (280 / 46)}
+                    y={c.y * (280 / 46)}
+                    width={280 / 46 + 0.5}
+                    height={280 / 46 + 0.5}
+                    fill={teal ? `rgba(20, 184, 166, ${intensity})` : `rgba(245, 158, 11, ${intensity})`}
+                  />
+                );
+              })}
+
+              {data
+                .filter((p) => showTest || !p.test)
+                .map((p, i) => (
+                  <circle
+                    key={i}
+                    cx={(p.x + 1) * 140}
+                    cy={(1 - (p.y + 1) / 2) * 280}
+                    r={p.test ? 4 : 5.5}
+                    fill={p.label === 1 ? "#0f766e" : "#d97706"}
+                    stroke="white"
+                    strokeWidth="1.5"
+                    opacity={p.test ? 0.55 : 1}
+                  />
+                ))}
+            </svg>
+
+            <div className="space-y-2">
+              <div className="text-sm font-bold text-slate-700">Түсіндірме</div>
+              <div className="h-4 rounded-full bg-gradient-to-r from-amber-400 via-white to-teal-600" />
+              <div className="flex justify-between text-sm text-slate-500">
+                <span>-1</span><span>0</span><span>1</span>
+              </div>
+            </div>
+
+            <label className="flex items-center gap-2 rounded-2xl bg-white p-3 font-bold text-slate-700">
+              <input type="checkbox" checked={showTest} onChange={(e) => setShowTest(e.target.checked)} />
+              Тест деректерін көрсету
+            </label>
+            <label className="flex items-center gap-2 rounded-2xl bg-white p-3 font-bold text-slate-700">
+              <input type="checkbox" checked={discretize} onChange={(e) => setDiscretize(e.target.checked)} />
+              Шығысты дискреттеу
+            </label>
+          </div>
+        </div>
+
+        <div className="m-5 rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+          <h3 className="text-2xl font-black text-slate-900">Бұл не үшін керек?</h3>
+          <p className="mt-3 text-sm leading-6 text-slate-700">
+            Бұл симулятор нейрондық желінің деректерді қалай ажырататынын көрсетеді. Нүктелер — дайын деректер,
+            фон түсі — модельдің шешім аймағы, ал ортадағы байланыстар — нейрондар арасындағы салмақтар.
+          </p>
+
+          <div className="mt-6 grid gap-4 md:grid-cols-4">
+            <SmallInfo title="Не үшін қолданылады?" text="Деректер арасындағы заңдылықты көзбен көру үшін." />
+            <SmallInfo title="Нені анықтайды?" text="Кіріс белгілері бойынша объектінің қай класқа жататынын анықтайды." />
+            <SmallInfo title="Не өзгереді?" text="Оқыту жүрген сайын шешім шекарасы және салмақтар өзгереді." />
+            <SmallInfo title="Қалай жұмыс істейді?" text="Кіріс → жасырын қабат → салмақ → activation → нәтиже." />
+          </div>
+
+          <div className="mt-6 grid gap-4 lg:grid-cols-2">
+            <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+              <div className="mb-3 text-lg font-black text-slate-900">Қалай пайдаланамыз?</div>
+              <ol className="list-decimal space-y-2 pl-5 text-sm leading-6 text-slate-700">
+                <li>Dataset таңдаңыз.</li>
+                <li>Керек белгілерді қосыңыз немесе өшіріңіз.</li>
+                <li>Жасырын қабат пен нейрон санын өзгертіңіз.</li>
+                <li>Play батырмасын басып, оқыту процесін бастаңыз.</li>
+                <li>OUTPUT графигінен шешім аймағын бақылаңыз.</li>
+              </ol>
+            </div>
+            <div className="rounded-3xl border border-amber-200 bg-amber-50 p-5">
+              <div className="mb-3 text-lg font-black text-amber-950">Кеңес</div>
+              <p className="text-sm leading-6 text-amber-900">
+                Нейрон немесе қабат саны көбейсе, желі күрделі заңдылықты жақсы үйренеді.
+                Бірақ тым көбейсе, модель артық үйренуі мүмкін. Бұл overfitting деп аталады.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </SectionCard>
+  );
+}
+
+
+
+
+function PlaygroundGuideCards() {
+  return (
+    <SectionCard title="Симуляторды қалай түсіну керек?" accent="from-cyan-600 to-blue-600">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <SmallInfo title="Dataset" text="Желі үйренетін деректер жиыны. Нүктелер екі класқа бөлінеді." />
+        <SmallInfo title="Features" text="Шешім қабылдауға қолданылатын белгілер. Белгіні қосқанда шекара өзгеруі мүмкін." />
+        <SmallInfo title="Hidden layers" text="Ақпаратты аралық өңдейтін жасырын қабаттар. Қабат көбейсе, модель күрделірек заңдылықты үйренеді." />
+        <SmallInfo title="Neurons" text="Әр қабаттағы есептеу элементтері. Нейрон көп болса, байланыс саны артады." />
+        <SmallInfo title="Learning rate" text="Оқыту жылдамдығы. Өте үлкен болса, модель тұрақсыз үйренуі мүмкін." />
+        <SmallInfo title="Output" text="Фон түсі модельдің болжамын, ал нүктелер нақты деректерді көрсетеді." />
+      </div>
+    </SectionCard>
+  );
+}
+
+function WhyResultChangedGuide() {
+  return (
+    <SectionCard title="Неге нәтиже өзгерді?" accent="from-emerald-600 to-teal-600">
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="rounded-3xl border border-slate-200 bg-white p-5">
+          <div className="mb-3 text-xl font-black text-slate-900">Өзгеріске әсер ететін себептер</div>
+          <div className="space-y-3 text-sm leading-6 text-slate-700">
+            <div>✓ Белгі қосылса, желі жаңа ақпаратты пайдаланады.</div>
+            <div>✓ Нейрон саны артса, модель күрделі шекара құра алады.</div>
+            <div>✓ Жасырын қабат көбейсе, деректер тереңірек өңделеді.</div>
+            <div>✓ Learning rate өзгерсе, оқыту жылдамдығы өзгереді.</div>
+            <div>✓ Noise көбейсе, деректер шатасып, дәлдік төмендеуі мүмкін.</div>
+          </div>
+        </div>
+        <div className="rounded-3xl border border-amber-200 bg-amber-50 p-5">
+          <div className="mb-3 text-xl font-black text-amber-950">Есте сақта!</div>
+          <p className="text-sm leading-6 text-amber-900">
+            Нейрондық желі дайын ережемен жұмыс істемейді. Ол мысалдарға қарап заңдылықты табады.
+            Сондықтан параметрлер өзгерсе, желінің шешім аймағы да өзгереді.
+          </p>
+        </div>
+      </div>
+    </SectionCard>
+  );
+}
+
+function ApplicationsShowcase() {
+  const items = [
+    { icon: "📷", title: "Компьютерлік көру", text: "Сурет пен бейнеден объектілерді анықтау." },
+    { icon: "🎤", title: "Дыбысты тану", text: "Дауысты мәтінге айналдыру және дыбыс түрін анықтау." },
+    { icon: "🏥", title: "Медицина", text: "Симптомдар немесе медициналық суреттер бойынша болжам жасау." },
+    { icon: "🚗", title: "Автокөлік", text: "Жаяу жүргінші, жол белгісі және қауіпті аймақты анықтау." },
+    { icon: "🌦️", title: "Ауа райы", text: "Температура, ылғалдылық, қысым арқылы болжам жасау." },
+    { icon: "📚", title: "Білім беру", text: "Оқушы нәтижесін талдау және жеке оқу бағытын ұсыну." },
+  ];
+
+  return (
+    <SectionCard title="Нейрондық желі қайда қолданылады?" accent="from-violet-600 to-fuchsia-600">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {items.map((item) => (
+          <div key={item.title} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="mb-3 text-4xl">{item.icon}</div>
+            <div className="text-lg font-black text-slate-900">{item.title}</div>
+            <p className="mt-2 text-sm leading-6 text-slate-700">{item.text}</p>
+          </div>
+        ))}
+      </div>
+    </SectionCard>
+  );
+}
+
+function OverfittingGuide() {
+  return (
+    <SectionCard title="Overfitting деген не?" accent="from-orange-500 to-red-500">
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="rounded-3xl border border-slate-200 bg-white p-5">
+          <div className="text-lg font-black text-slate-900">Қарапайым түсінік</div>
+          <p className="mt-2 text-sm leading-6 text-slate-700">
+            Overfitting — модельдің оқыту деректерін тым қатты жаттап алып, жаңа деректерде нашар жұмыс істеуі.
+          </p>
+          <AnimatedFlow steps={["Оқыту дерегі", "Жаттап алу", "Жаңа дерек", "Қате нәтиже"]} />
+        </div>
+        <div className="rounded-3xl border border-slate-200 bg-white p-5">
+          <BarChart
+            title="Overfitting кезінде не болады?"
+            data={[
+              { label: "Оқыту дәлдігі", value: 96 },
+              { label: "Тест дәлдігі", value: 62 },
+              { label: "Жалпылау", value: 48 },
+            ]}
+          />
+        </div>
+      </div>
+    </SectionCard>
+  );
+}
+
+function GlossarySection() {
+  const terms = [
+    ["Нейрон", "Кіріс мәндерін қабылдап, есептеп, шығыс беретін негізгі элемент."],
+    ["Салмақ", "Кіріс дерегінің қаншалықты маңызды екенін көрсететін коэффициент."],
+    ["Bias", "Нейрон нәтижесін ығыстыратын қосымша мән."],
+    ["Activation", "Нейрон шығысын түрлендіретін функция."],
+    ["Epoch", "Оқыту деректерінен бір толық өту кезеңі."],
+    ["Loss", "Модель қатесінің сандық көрсеткіші."],
+    ["Dataset", "Модельді үйретуге арналған деректер жиыны."],
+    ["Overfitting", "Модельдің деректерді жаттап алып, жаңа деректерде қателесуі."],
+  ];
+
+  return (
+    <SectionCard title="Қысқаша терминдер сөздігі" accent="from-slate-700 to-slate-900">
+      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+        {terms.map(([term, text]) => (
+          <div key={term} className="rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="font-black text-slate-900">{term}</div>
+            <div className="mt-2 text-sm leading-6 text-slate-700">{text}</div>
+          </div>
+        ))}
+      </div>
+    </SectionCard>
+  );
+}
+
+
 function FlowPage() {
   const examples = [
     {
@@ -1397,6 +2017,13 @@ function FlowPage() {
 
   return (
     <div className="space-y-6">
+      <PlaygroundLikeSimulator />
+      <PlaygroundGuideCards />
+      <WhyResultChangedGuide />
+      <ApplicationsShowcase />
+      <OverfittingGuide />
+      <GlossarySection />
+
       <SectionCard title="Ақпараттың нейрондық желі ішінде жүруі" accent="from-blue-600 to-cyan-600">
         <div className="grid gap-5 lg:grid-cols-2">
           <VisualImage src={item.img} title={item.title} text={item.text} />
@@ -1618,6 +2245,58 @@ function NeuronPage() {
   );
 }
 
+
+function DecisionMiniSimulator({
+  title,
+  icon,
+  aLabel,
+  bLabel,
+  cLabel,
+  positive,
+  negative,
+  explanation,
+}: {
+  title: string;
+  icon: string;
+  aLabel: string;
+  bLabel: string;
+  cLabel: string;
+  positive: string;
+  negative: string;
+  explanation: string;
+}) {
+  const [a, setA] = useState(0.7);
+  const [b, setB] = useState(0.4);
+  const [c, setC] = useState(0.8);
+  const score = clamp(a * 0.42 + b * 0.22 + c * 0.36, 0, 1);
+  const result = score >= 0.55 ? positive : negative;
+
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="mb-4 flex items-center gap-3">
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-3xl">{icon}</div>
+        <div>
+          <div className="text-xl font-black text-slate-900">{title}</div>
+          <div className="text-sm leading-6 text-slate-600">{explanation}</div>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <RangeField label={aLabel} value={a} min={0} max={1} step={0.05} onChange={setA} />
+        <RangeField label={bLabel} value={b} min={0} max={1} step={0.05} onChange={setB} />
+        <RangeField label={cLabel} value={c} min={0} max={1} step={0.05} onChange={setC} />
+      </div>
+
+      <div className="mt-4 rounded-2xl bg-slate-900 p-4 text-white">
+        <div className="text-sm text-slate-300">Нәтиже</div>
+        <div className="text-2xl font-black">{result}</div>
+        <div className="mt-2 text-sm text-slate-300">Ұқсастық көрсеткіші: {Math.round(score * 100)}%</div>
+      </div>
+    </div>
+  );
+}
+
+
 function ImagePage() {
   const [earSharpness, setEarSharpness] = useState(0.8);
   const [whiskers, setWhiskers] = useState(0.9);
@@ -1759,7 +2438,7 @@ function DigitCanvas() {
     6: ["01111", "10000", "10000", "11110", "10001", "10001", "01110"],
     7: ["11111", "00001", "00010", "00100", "01000", "01000", "01000"],
     8: ["01110", "10001", "10001", "01110", "10001", "10001", "01110"],
-    9: ["01110", "10001", "10001", "01111", "00001", "00001", "11110"],
+    9: ["01110", "10001", "10001", "01111", "00001", "00010", "11100"],
   };
 
   const drawTemplate = (digit: number) => {
@@ -1941,8 +2620,19 @@ function DigitCanvas() {
       if (Number(digit) === 8) {
         const left = binary.reduce<number>((a, row) => a + Number(row[0]), 0);
         const right = binary.reduce<number>((a, row) => a + Number(row[4]), 0);
-        const middle = binary[3].reduce<number>((a, b) => a + Number(b), 0);
-        if (left >= 3 && right >= 3 && middle >= 2) score += 12;
+        const mid = binary[3].reduce<number>((a, b) => a + Number(b), 0);
+        if (left >= 3 && right >= 3 && mid >= 2) score += 12;
+      }
+
+      if (Number(digit) === 9) {
+        const top = binary[0].reduce<number>((a, b) => a + Number(b), 0);
+        const mid = binary[3].reduce<number>((a, b) => a + Number(b), 0);
+        const upperLeft = binary[1][0] + binary[2][0];
+        const upperRight = binary[1][4] + binary[2][4];
+        const lowerRight = binary[4][4] + binary[5][4];
+        const lowerLeft = binary[4][0] + binary[5][0];
+        if (top >= 3 && mid >= 3 && upperLeft >= 1 && upperRight >= 1 && lowerRight >= 1) score += 22;
+        if (lowerLeft === 0) score += 8;
       }
 
       return { digit: Number(digit), score: clamp(score, 1, 100) };
@@ -2023,6 +2713,7 @@ function DigitCanvas() {
           )}
         </div>
       </div>
+
     </div>
   );
 }
@@ -2170,6 +2861,18 @@ function SymptomDiagnosisSimulator() {
       score: (stomach ? 55 : 0) + (fatigue ? 10 : 0) + (fever ? 10 : 0),
       text: "Іштің ауыруы немесе жүрек айну асқазан-ішек жүйесімен байланысты белгі болуы мүмкін.",
     },
+    {
+      name: "Аллергия белгісі",
+      icon: "🌿",
+      score: (runnyNose ? 30 : 0) + (headache ? 10 : 0) + (!fever && runnyNose ? 20 : 0),
+      text: "Қызусыз мұрыннан су ағу, түшкіру немесе бас ауыру аллергияға ұқсас белгі болуы мүмкін.",
+    },
+    {
+      name: "Қан қысымы жоғары болуы мүмкін",
+      icon: "🩺",
+      score: (headache ? 30 : 0) + (fatigue ? 15 : 0) + (!cough && headache ? 15 : 0),
+      text: "Бас ауруы мен әлсіздік кейде қан қысымының жоғарылауымен байланысты болуы мүмкін.",
+    },
   ];
 
   const sorted = [...diseases].sort((a, b) => b.score - a.score);
@@ -2219,7 +2922,7 @@ function SymptomDiagnosisSimulator() {
           <div className="rounded-3xl border border-slate-200 bg-white p-5 text-center">
             <div className="text-6xl">{best.icon}</div>
             <div className="mt-3 text-2xl font-black text-slate-900">{best.name}</div>
-            <div className="mt-2 text-sm leading-6 text-slate-700">{best.text}</div>
+            <div className="mt-2 text-xs leading-5 text-slate-700">{best.text}</div>
             <div className="mt-3 rounded-2xl bg-slate-100 px-4 py-3 text-sm font-bold text-slate-800">
               Ұқсастық көрсеткіші: {safeScore}%
             </div>
@@ -2517,6 +3220,25 @@ else:
 
   return (
     <div className="space-y-6">
+
+      <SectionCard title="Тексеру сұрақтары" accent="from-blue-600 to-indigo-600">
+        <div className="grid gap-3 md:grid-cols-2">
+          {[
+            "Салмақ нейрондық желіде қандай рөл атқарады?",
+            "Bias не үшін қажет?",
+            "Activation функциясы нәтиже қалай өзгертеді?",
+            "Нейрондық желі қалай үйренеді?",
+            "Overfitting дегеніміз не және неге қауіпті?",
+            "Dataset пен feature ұғымдарының айырмашылығы қандай?",
+          ].map((q, i) => (
+            <div key={q} className="rounded-2xl border border-slate-200 bg-white p-4 text-sm font-bold text-slate-800">
+              {i + 1}. {q}
+            </div>
+          ))}
+        </div>
+      </SectionCard>
+
+
       <TrainYourModel />
       <OverfittingDemo />
 
@@ -2533,6 +3255,678 @@ else:
     </div>
   );
 }
+
+
+function AIToolsPage() {
+  return (
+    <div className="space-y-6">
+      <SectionCard title="Жасанды интеллект құралдары" accent="from-violet-600 to-cyan-600">
+        <div className="grid gap-4 lg:grid-cols-2">
+          <SmallInfo
+            title="1. Мәтін → дыбыс"
+            text="Мәтінді енгізіп, браузер арқылы дауыстап оқыту. Бұл Text-to-Speech ұғымын түсіндіреді."
+          />
+          <SmallInfo
+            title="2. Дыбыс → мәтін"
+            text="Микрофон арқылы сөйленген сөзді мәтінге айналдыру. Бұл Speech-to-Text жұмысын көрсетеді."
+          />
+          <SmallInfo
+            title="3. Сурет → мәтін"
+            text="OCR қалай жұмыс істейтінін көрсететін оқу құралы. Сурет жүктеп, мәтінді тану кезеңдерін көруге болады."
+          />
+          <SmallInfo
+            title="4. Камера → эмоция"
+            text="Камерадағы бейнені талдау идеясын түсіндіретін эмоция анықтау симуляторы."
+          />
+        </div>
+      </SectionCard>
+
+      <div className="grid gap-6 xl:grid-cols-2">
+        <TextToSpeechTool />
+        <SpeechToTextTool />
+        <OCRLearningTool />
+        <EmotionLearningTool />
+      </div>
+
+      <SectionCard title="Бұл құралдар не үшін керек?" accent="from-slate-700 to-slate-900">
+        <div className="grid gap-4 md:grid-cols-4">
+          <SmallInfo title="TTS" text="Компьютер мәтінді дыбысқа айналдырады." />
+          <SmallInfo title="STT" text="Компьютер дыбысты мәтінге айналдырады." />
+          <SmallInfo title="OCR" text="Компьютер суреттен әріптерді табады." />
+          <SmallInfo title="Emotion AI" text="Компьютер бет-әлпет белгісін талдайды." />
+        </div>
+      </SectionCard>
+    </div>
+  );
+}
+
+function TextToSpeechTool() {
+  const [text, setText] = useState("Сәлем! Бұл нейрондық желілерді үйренуге арналған интерактивті платформа.");
+  const [rate, setRate] = useState(0.82);
+  const [pitch, setPitch] = useState(0.95);
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [voiceName, setVoiceName] = useState("");
+  const [status, setStatus] = useState("Мәтінді жазып, «Тыңдау» батырмасын басыңыз.");
+
+  useEffect(() => {
+    if (!("speechSynthesis" in window)) return;
+
+    const loadVoices = () => {
+      const available = window.speechSynthesis.getVoices();
+      setVoices(available);
+
+      const best =
+        available.find((v) => v.lang.toLowerCase().includes("kk")) ||
+        available.find((v) => v.lang.toLowerCase().includes("ru")) ||
+        available.find((v) => v.lang.toLowerCase().includes("tr")) ||
+        available.find((v) => v.lang.toLowerCase().includes("en")) ||
+        available[0];
+
+      if (best && !voiceName) setVoiceName(best.name);
+    };
+
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+  }, [voiceName]);
+
+  const speak = () => {
+    if (!("speechSynthesis" in window)) {
+      setStatus("Бұл браузер мәтінді дыбысқа айналдыруды қолдамайды.");
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text.trim() || "Мәтін енгізілмеді.");
+    const selectedVoice = voices.find((v) => v.name === voiceName);
+
+    if (selectedVoice) {
+      utterance.voice = selectedVoice;
+      utterance.lang = selectedVoice.lang;
+    } else {
+      utterance.lang = "kk-KZ";
+    }
+
+    utterance.rate = rate;
+    utterance.pitch = pitch;
+    utterance.volume = 1;
+
+    utterance.onstart = () => setStatus("Оқылып жатыр...");
+    utterance.onend = () => setStatus("Оқу аяқталды.");
+    utterance.onerror = () => setStatus("Дауыс шығару кезінде қате пайда болды.");
+
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const stop = () => {
+    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+    setStatus("Тоқтатылды.");
+  };
+
+  const downloadText = () => {
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "tts_text.txt";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="mb-4">
+        <div className="text-2xl font-black text-slate-900">🔊 Мәтінді дыбысқа айналдыру</div>
+        <p className="mt-2 text-sm leading-6 text-slate-700">
+          Бұл құрал мәтінді дауыстап оқиды. Дауыс сапасы браузерде орнатылған тілдік дауыстарға байланысты.
+          Қазақша дауыс табылмаса, жүйе орысша немесе ағылшынша дауысқа ауысады.
+        </p>
+      </div>
+
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        className="min-h-32 w-full rounded-2xl border border-slate-300 p-4 text-sm leading-6"
+        placeholder="Оқылатын мәтінді жазыңыз..."
+      />
+
+      <div className="mt-4">
+        <div className="mb-1 text-sm font-bold text-slate-700">Дауыс таңдау</div>
+        <select
+          value={voiceName}
+          onChange={(e) => setVoiceName(e.target.value)}
+          className="w-full rounded-2xl border border-slate-300 p-3 text-sm"
+        >
+          {voices.length === 0 && <option>Браузер дауыстары жүктелмеді</option>}
+          {voices.map((voice) => (
+            <option key={`${voice.name}-${voice.lang}`} value={voice.name}>
+              {voice.name} — {voice.lang}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <RangeField label="Оқу жылдамдығы" value={rate} min={0.5} max={1.3} step={0.05} onChange={setRate} />
+        <RangeField label="Дауыс биіктігі" value={pitch} min={0.6} max={1.4} step={0.05} onChange={setPitch} />
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button onClick={speak} className="rounded-2xl bg-violet-600 px-4 py-2 font-bold text-white hover:bg-violet-700">
+          ▶ Тыңдау
+        </button>
+        <button onClick={stop} className="rounded-2xl bg-slate-700 px-4 py-2 font-bold text-white hover:bg-slate-800">
+          ⏹ Тоқтату
+        </button>
+        <button onClick={downloadText} className="rounded-2xl bg-emerald-600 px-4 py-2 font-bold text-white hover:bg-emerald-700">
+          ⬇ Мәтінді жүктеу
+        </button>
+      </div>
+
+      <div className="mt-4 rounded-2xl bg-amber-50 p-3 text-sm leading-6 text-amber-900">
+        Ескерту: браузердің SpeechSynthesis дауысы MP3 ретінде тікелей сақталмайды. Дыбысты MP3 етіп жүктеу үшін Google TTS,
+        Microsoft Azure немесе ElevenLabs сияқты серверлік API қажет.
+      </div>
+
+      <div className="mt-4 rounded-2xl bg-slate-100 px-4 py-3 text-sm text-slate-700">{status}</div>
+      <Formula>{`Text → voice selection → speech synthesis → sound`}</Formula>
+    </div>
+  );
+}
+
+
+function SpeechToTextTool() {
+  const [listening, setListening] = useState(false);
+  const [transcript, setTranscript] = useState("");
+  const recognitionRef = useRef<any>(null);
+
+  const startListening = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setTranscript("Бұл браузер Speech Recognition API қолдамайды. Chrome браузерін қолданып көріңіз.");
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = "kk-KZ";
+    recognition.interimResults = true;
+    recognition.continuous = true;
+
+    recognition.onresult = (event: any) => {
+      let text = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        text += event.results[i][0].transcript;
+      }
+      setTranscript(text);
+    };
+
+    recognition.onerror = () => {
+      setListening(false);
+      setTranscript("Микрофонға рұқсат берілмеді немесе тану кезінде қате шықты.");
+    };
+
+    recognition.onend = () => setListening(false);
+    recognitionRef.current = recognition;
+    recognition.start();
+    setListening(true);
+  };
+
+  const stopListening = () => {
+    recognitionRef.current?.stop();
+    setListening(false);
+  };
+
+  return (
+    <div className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="mb-4">
+        <div className="text-2xl font-black text-slate-900">🎙️ Дыбысты мәтінге айналдыру</div>
+        <p className="mt-2 text-sm leading-6 text-slate-700">
+          Бұл құрал микрофоннан дыбыс қабылдап, оны мәтін ретінде көрсетуге тырысады.
+          Бұл сөйлеуді тану жүйелерінің қарапайым демонстрациясы.
+        </p>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <button
+          onClick={startListening}
+          disabled={listening}
+          className="rounded-2xl bg-emerald-600 px-4 py-2 font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
+        >
+          🎤 Бастау
+        </button>
+        <button onClick={stopListening} className="rounded-2xl bg-slate-700 px-4 py-2 font-bold text-white hover:bg-slate-800">
+          ⏹ Тоқтату
+        </button>
+      </div>
+
+      <div className="mt-4 min-h-40 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-800">
+        {transcript || "Микрофонды қосып, сөйлеңіз. Танылған мәтін осында шығады."}
+      </div>
+
+      <Formula>{`Sound → spectrogram → speech model → text`}</Formula>
+    </div>
+  );
+}
+
+function OCRLearningTool() {
+  const [imageUrl, setImageUrl] = useState("");
+  const [status, setStatus] = useState("Сурет жүктелмеді");
+  const [recognizedText, setRecognizedText] = useState("");
+  const [isRecognizing, setIsRecognizing] = useState(false);
+  const imageRef = useRef<HTMLImageElement | null>(null);
+
+  const loadTesseract = () => {
+    return new Promise<any>((resolve, reject) => {
+      if (window.Tesseract) {
+        resolve(window.Tesseract);
+        return;
+      }
+
+      const script = document.createElement("script");
+      script.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+      script.async = true;
+      script.onload = () => resolve(window.Tesseract);
+      script.onerror = () => reject(new Error("Tesseract кітапханасы жүктелмеді"));
+      document.body.appendChild(script);
+    });
+  };
+
+  const uploadImage = (file: File | undefined) => {
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    setImageUrl(url);
+    setStatus("Сурет жүктелді. «Мәтінді тану» батырмасын басыңыз.");
+    setRecognizedText("");
+  };
+
+  const recognize = async () => {
+    if (!imageUrl) {
+      setStatus("Алдымен сурет жүктеңіз.");
+      return;
+    }
+
+    try {
+      setIsRecognizing(true);
+      setStatus("OCR кітапханасы жүктеліп жатыр...");
+      const Tesseract = await loadTesseract();
+
+      setStatus("Мәтін танылып жатыр. Бұл бірнеше секунд алуы мүмкін...");
+      const result = await Tesseract.recognize(imageUrl, "eng+rus", {
+        logger: (m: any) => {
+          if (m.status) setStatus(`OCR: ${m.status} ${m.progress ? Math.round(m.progress * 100) + "%" : ""}`);
+        },
+      });
+
+      const text = result?.data?.text?.trim() || "Мәтін анықталмады.";
+      setRecognizedText(text);
+      setStatus("OCR аяқталды.");
+    } catch {
+      setStatus("OCR іске қосылмады. Интернетті тексеріңіз немесе басқа сурет жүктеп көріңіз.");
+    } finally {
+      setIsRecognizing(false);
+    }
+  };
+
+  return (
+    <div className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="mb-4">
+        <div className="text-2xl font-black text-slate-900">🖼️ Суреттен мәтін шығару</div>
+        <p className="mt-2 text-sm leading-6 text-slate-700">
+          OCR жүйесі суреттегі әріптерді тауып, оларды мәтінге айналдырады. Бұл бөлімде сурет жүктеп, мәтінді нақты тануға болады.
+        </p>
+      </div>
+
+      <input
+        type="file"
+        accept="image/*"
+        onChange={(e) => uploadImage(e.target.files?.[0])}
+        className="w-full rounded-2xl border border-slate-300 p-3 text-sm"
+      />
+
+      {imageUrl && (
+        <img
+          ref={imageRef}
+          src={imageUrl}
+          alt="OCR үшін жүктелген сурет"
+          className="mt-4 max-h-64 w-full rounded-2xl border border-slate-200 object-contain"
+        />
+      )}
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button
+          onClick={recognize}
+          disabled={isRecognizing}
+          className="rounded-2xl bg-blue-600 px-4 py-2 font-bold text-white hover:bg-blue-700 disabled:opacity-50"
+        >
+          🔍 Мәтінді тану
+        </button>
+      </div>
+
+      <div className="mt-4 rounded-2xl bg-slate-100 p-4 text-sm leading-6 text-slate-700">{status}</div>
+
+      <textarea
+        value={recognizedText}
+        onChange={(e) => setRecognizedText(e.target.value)}
+        className="mt-4 min-h-32 w-full rounded-2xl border border-slate-300 p-4 text-sm leading-6"
+        placeholder="Танылған мәтін осында шығады..."
+      />
+
+      <Formula>{`Image → preprocessing → character detection → recognized text`}</Formula>
+    </div>
+  );
+}
+
+
+function EmotionLearningTool() {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const overlayRef = useRef<HTMLCanvasElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  const [status, setStatus] = useState("Модель жүктеліп жатыр...");
+  const [modelsLoaded, setModelsLoaded] = useState(false);
+  const [detecting, setDetecting] = useState(false);
+  const [scores, setScores] = useState({
+    happy: 0,
+    neutral: 0,
+    surprised: 0,
+    sad: 0,
+    angry: 0,
+    fearful: 0,
+    disgusted: 0,
+  });
+
+  useEffect(() => {
+    const loadModels = async () => {
+      try {
+        setStatus("Face API модельдері жүктеліп жатыр...");
+        await faceapi.nets.tinyFaceDetector.loadFromUri("/models");
+        await faceapi.nets.faceExpressionNet.loadFromUri("/models");
+        setModelsLoaded(true);
+        setStatus("Модель дайын. Камераны қосыңыз немесе сурет жүктеңіз.");
+      } catch (error) {
+        setStatus("Модельдер жүктелмеді. public/models папкасындағы файл атауларын тексеріңіз.");
+      }
+    };
+
+    loadModels();
+
+    return () => {
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+    };
+  }, []);
+
+  const emotionMap: Record<string, { label: string; emoji: string }> = {
+    happy: { label: "ҚУАНЫШ", emoji: "😀" },
+    neutral: { label: "БЕЙТАРАП", emoji: "😐" },
+    surprised: { label: "ТАҢҒАЛУ", emoji: "😲" },
+    sad: { label: "МҰҢ", emoji: "😢" },
+    angry: { label: "АШУ", emoji: "😠" },
+    fearful: { label: "ҚОРҚЫНЫШ", emoji: "😨" },
+    disgusted: { label: "ЖИІРКЕНУ", emoji: "🤢" },
+  };
+
+  const best = Object.entries(scores).sort((a, b) => b[1] - a[1])[0] || ["neutral", 0];
+  const bestInfo = emotionMap[best[0]] || emotionMap.neutral;
+
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      streamRef.current = stream;
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+
+      setStatus("Камера қосылды. «Эмоцияны анықтау» батырмасын басыңыз.");
+    } catch {
+      setStatus("Камераға рұқсат берілмеді. Браузерден камера рұқсатын қосыңыз.");
+    }
+  };
+
+  const stopCamera = () => {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+
+    if (videoRef.current) videoRef.current.srcObject = null;
+
+    const overlay = overlayRef.current;
+    const ctx = overlay?.getContext("2d");
+    if (overlay && ctx) ctx.clearRect(0, 0, overlay.width, overlay.height);
+
+    setDetecting(false);
+    setStatus("Камера тоқтатылды.");
+  };
+
+  const drawLabelOnOverlay = (
+    box: { x: number; y: number; width: number; height: number },
+    emotionKey: string,
+    confidence: number
+  ) => {
+    const overlay = overlayRef.current;
+    const video = videoRef.current;
+    if (!overlay || !video) return;
+
+    const rect = video.getBoundingClientRect();
+    overlay.width = rect.width;
+    overlay.height = rect.height;
+
+    const ctx = overlay.getContext("2d");
+    if (!ctx) return;
+
+    ctx.clearRect(0, 0, overlay.width, overlay.height);
+
+    const scaleX = overlay.width / video.videoWidth;
+    const scaleY = overlay.height / video.videoHeight;
+
+    const x = box.x * scaleX;
+    const y = box.y * scaleY;
+    const w = box.width * scaleX;
+    const h = box.height * scaleY;
+
+    const info = emotionMap[emotionKey] || emotionMap.neutral;
+    const label = `${info.emoji} ${info.label} ${Math.round(confidence * 100)}%`;
+
+    ctx.strokeStyle = "#14b8a6";
+    ctx.lineWidth = 4;
+    ctx.strokeRect(x, y, w, h);
+
+    const labelY = Math.max(10, y - 48);
+    ctx.fillStyle = "rgba(15, 23, 42, 0.86)";
+    ctx.roundRect(x, labelY, Math.max(190, label.length * 12), 40, 14);
+    ctx.fill();
+
+    ctx.fillStyle = "white";
+    ctx.font = "bold 20px Arial";
+    ctx.fillText(label, x + 12, labelY + 27);
+  };
+
+  const detectFromVideo = async () => {
+    if (!modelsLoaded) {
+      setStatus("Модель әлі жүктелмеді.");
+      return;
+    }
+
+    if (!videoRef.current) return;
+
+    setDetecting(true);
+    setStatus("Эмоция анықталып жатыр...");
+
+    const result = await faceapi
+      .detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.45 }))
+      .withFaceExpressions();
+
+    if (!result) {
+      setStatus("Бет анықталмады. Камераға жақынырақ қараңыз немесе жарықты көбейтіңіз.");
+      setDetecting(false);
+      return;
+    }
+
+    const expressions = result.expressions as Record<string, number>;
+    const normalized = {
+      happy: Math.round((expressions.happy || 0) * 100),
+      neutral: Math.round((expressions.neutral || 0) * 100),
+      surprised: Math.round((expressions.surprised || 0) * 100),
+      sad: Math.round((expressions.sad || 0) * 100),
+      angry: Math.round((expressions.angry || 0) * 100),
+      fearful: Math.round((expressions.fearful || 0) * 100),
+      disgusted: Math.round((expressions.disgusted || 0) * 100),
+    };
+
+    setScores(normalized);
+
+    const bestEmotion = Object.entries(expressions).sort((a, b) => b[1] - a[1])[0];
+    drawLabelOnOverlay(result.detection.box, bestEmotion[0], bestEmotion[1]);
+
+    const info = emotionMap[bestEmotion[0]] || emotionMap.neutral;
+    setStatus(`${info.emoji} ${info.label} анықталды: ${Math.round(bestEmotion[1] * 100)}%`);
+    setDetecting(false);
+  };
+
+  const uploadImage = async (file: File | undefined) => {
+    if (!file) return;
+
+    if (!modelsLoaded) {
+      setStatus("Модель әлі жүктелмеді.");
+      return;
+    }
+
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (!canvas || !ctx) return;
+
+    const img = new Image();
+
+    img.onload = async () => {
+      canvas.width = 640;
+      canvas.height = 360;
+
+      ctx.fillStyle = "white";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      const scale = Math.min(canvas.width / img.width, canvas.height / img.height);
+      const w = img.width * scale;
+      const h = img.height * scale;
+      const x = (canvas.width - w) / 2;
+      const y = (canvas.height - h) / 2;
+      ctx.drawImage(img, x, y, w, h);
+
+      setStatus("Сурет жүктелді. Эмоция анықталып жатыр...");
+
+      const result = await faceapi
+        .detectSingleFace(canvas, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.45 }))
+        .withFaceExpressions();
+
+      if (!result) {
+        setStatus("Суреттен бет анықталмады. Беті анық көрінетін сурет таңдаңыз.");
+        return;
+      }
+
+      const expressions = result.expressions as Record<string, number>;
+      const normalized = {
+        happy: Math.round((expressions.happy || 0) * 100),
+        neutral: Math.round((expressions.neutral || 0) * 100),
+        surprised: Math.round((expressions.surprised || 0) * 100),
+        sad: Math.round((expressions.sad || 0) * 100),
+        angry: Math.round((expressions.angry || 0) * 100),
+        fearful: Math.round((expressions.fearful || 0) * 100),
+        disgusted: Math.round((expressions.disgusted || 0) * 100),
+      };
+
+      setScores(normalized);
+
+      const bestEmotion = Object.entries(expressions).sort((a, b) => b[1] - a[1])[0];
+      const info = emotionMap[bestEmotion[0]] || emotionMap.neutral;
+
+      ctx.strokeStyle = "#14b8a6";
+      ctx.lineWidth = 4;
+      ctx.strokeRect(result.detection.box.x, result.detection.box.y, result.detection.box.width, result.detection.box.height);
+
+      ctx.fillStyle = "rgba(15, 23, 42, 0.86)";
+      ctx.roundRect(result.detection.box.x, Math.max(10, result.detection.box.y - 48), 230, 40, 14);
+      ctx.fill();
+
+      ctx.fillStyle = "white";
+      ctx.font = "bold 20px Arial";
+      ctx.fillText(`${info.emoji} ${info.label} ${Math.round(bestEmotion[1] * 100)}%`, result.detection.box.x + 12, Math.max(37, result.detection.box.y - 21));
+
+      setStatus(`${info.emoji} ${info.label} анықталды: ${Math.round(bestEmotion[1] * 100)}%`);
+    };
+
+    img.src = URL.createObjectURL(file);
+  };
+
+  return (
+    <div className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="mb-4">
+        <div className="text-2xl font-black text-slate-900">😀 Нақты эмоция тану</div>
+        <p className="mt-2 text-sm leading-6 text-slate-700">
+          Бұл бөлім face-api.js моделін пайдаланып, камерадан немесе жүктелген суреттен адамның эмоциясын анықтайды.
+          Нәтиже адамның бетінің үстіне жазылып шығады.
+        </p>
+      </div>
+
+      <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-slate-900">
+        <video ref={videoRef} className="aspect-video w-full object-cover" playsInline muted />
+        <canvas ref={overlayRef} className="pointer-events-none absolute inset-0 h-full w-full" />
+        <div className="pointer-events-none absolute right-4 top-4 rounded-2xl bg-slate-950/80 px-4 py-3 text-white shadow-lg">
+          <div className="text-2xl font-black">{bestInfo.emoji} {bestInfo.label}</div>
+          <div className="text-sm text-slate-300">Сенімділік: {Math.round(best[1])}%</div>
+        </div>
+      </div>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => uploadImage(e.target.files?.[0])}
+      />
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button onClick={startCamera} className="rounded-2xl bg-slate-900 px-4 py-2 font-bold text-white hover:bg-slate-800">
+          📷 Камераны қосу
+        </button>
+        <button
+          onClick={detectFromVideo}
+          disabled={!modelsLoaded || detecting}
+          className="rounded-2xl bg-emerald-600 px-4 py-2 font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
+        >
+          😀 Эмоцияны анықтау
+        </button>
+        <button onClick={() => fileInputRef.current?.click()} className="rounded-2xl bg-violet-600 px-4 py-2 font-bold text-white hover:bg-violet-700">
+          ⬆ Сурет жүктеу
+        </button>
+        <button onClick={stopCamera} className="rounded-2xl bg-red-600 px-4 py-2 font-bold text-white hover:bg-red-700">
+          ⏹ Тоқтату
+        </button>
+      </div>
+
+      <canvas ref={canvasRef} className="mt-4 aspect-video w-full rounded-2xl border border-slate-200 bg-white" />
+
+      <BarChart
+        title="Эмоция ықтималдықтары"
+        data={[
+          { label: "Қуаныш", value: scores.happy },
+          { label: "Бейтарап", value: scores.neutral },
+          { label: "Таңғалу", value: scores.surprised },
+          { label: "Мұң", value: scores.sad },
+          { label: "Ашу", value: scores.angry },
+          { label: "Қорқыныш", value: scores.fearful },
+          { label: "Жиіркену", value: scores.disgusted },
+        ]}
+      />
+
+      <div className="mt-4 rounded-2xl bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">
+        Ескерту: бұл оқу мақсатындағы AI құрал. Нәтиже жарық, камера сапасы және бет көрінуіне байланысты өзгеруі мүмкін.
+      </div>
+
+      <div className="mt-4 rounded-2xl bg-slate-100 px-4 py-3 text-sm text-slate-700">{status}</div>
+    </div>
+  );
+}
+
 
 export default function Page() {
   const [menu, setMenu] = useState<MenuKey>("home");
@@ -2565,6 +3959,7 @@ export default function Page() {
         {menu === "sound" && <SoundPage />}
         {menu === "sensors" && <SensorsPage />}
         {menu === "camera" && <CameraPage />}
+        {menu === "aiTools" && <AIToolsPage />}
         {menu === "practice" && <PracticePage />}
       </main>
     </div>
